@@ -17,4 +17,16 @@ function M.write_file(filename, content)
   file:close()
 end
 
+---@param arr any[]
+---@param val any
+---@return boolean
+function M.has_value(arr, val)
+  for _, value in ipairs(arr) do
+    if value == val then
+      return true
+    end
+  end
+  return false
+end
+
 return M

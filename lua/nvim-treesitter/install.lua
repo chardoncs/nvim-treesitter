@@ -646,4 +646,82 @@ M.uninstall = a.async(function(languages, options)
   end
 end)
 
+---Object for storing autoinstall information
+local autoinstall_obj = {
+  installed_fts = {},
+  available_fts = {},
+}
+
+function autoinstall_obj:init()
+  self:update_fts()
+  self.available_fts = require("nvim-treesitter").get_available()
+end
+
+function autoinstall_obj:update_fts()
+  self.installed_fts = require("nvim-treesitter").get_installed()
+end
+
+
+local function treesitter_start()
+  autoinstall_obj:update_fts()
+  vim.treesitter.start()
+end
+
+function M.setup_autoinstall()
+  if not config.auto_install_fts or type(config.auto_install_fts) == "table" and #config.auto_install_fts == 0 then
+    return
+  end
+
+  autoinstall_obj:init()
+
+  local group = vim.api.nvim_create_augroup("nvim-treesitter-autoinstall", { clear = false })
+
+  vim.api.nvim_create_autocmd('FileType', {
+    group = group,
+    pattern = type(config.auto_install_fts) == "table" and config.auto_install_fts or "*",
+    callback = function()
+      local ft = vim.bo.filetype
+      if config.ignore_install_fts ~= nil and util.has_value(config.ignore_install_fts, ft) then
+        return
+      end
+
+      -- Activate Tree-sitter when available
+      if util.has_value(M.available_fts, ft) then
+        -- Install filetype
+        if not util.has_value(M.installed_fts, ft) then
+          a.arun(function ()
+            a.await(require("nvim-treesitter.install").install(ft))
+            treesitter_start()
+          end)
+        else
+          treesitter_start()
+        end
+      end
+    end,
+  })
+end
+
+---@param languages string[]
+---@return string[]
+function autoinstall_obj:get_not_installed_languages(languages)
+  local results = {}
+
+  for _, lang in ipairs(languages) do
+    if not util.has_value(autoinstall_obj.installed_fts, lang) then
+      table.insert(results, lang)
+    end
+  end
+
+  return results
+end
+
+---@async
+M.setup_ensure_install = a.async(function ()
+  local langs = config.ensure_install
+  if langs and #langs > 0 then
+    local not_installed = autoinstall_obj:get_not_installed_languages(langs)
+    a.await(M.install(not_installed))
+  end
+end)
+
 return M

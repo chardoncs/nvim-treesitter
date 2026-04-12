@@ -2,12 +2,18 @@ local M = {}
 
 M.tiers = { 'stable', 'unstable', 'unmaintained', 'unsupported' }
 
+---@alias AutoInstallOption boolean|string[]
+
 ---@class TSConfig
 ---@field install_dir string
+---@field auto_install AutoInstallOption
+---@field ensure_install? string[]
+---@field ignore_install? string[]
 
 ---@type TSConfig
 local config = {
   install_dir = vim.fs.joinpath(vim.fn.stdpath('data') --[[@as string]], 'site'),
+  auto_install = false,
 }
 
 ---Setup call for users to override configuration configurations.
@@ -20,6 +26,10 @@ function M.setup(user_data)
     end
     config = vim.tbl_deep_extend('force', config, user_data)
   end
+
+  local install = require("nvim-treesitter.install")
+  install.setup_autoinstall()
+  install.setup_ensure_install()
 end
 
 -- Returns the install path for parsers, parser info, and queries.
