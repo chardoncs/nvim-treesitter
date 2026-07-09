@@ -662,39 +662,53 @@ function autoinstall_obj:update_fts()
 end
 
 
-local function treesitter_start()
+---Update installed filetypes and start treesitter on the given buffer.
+---@param bufnr integer
+local function treesitter_start(bufnr)
   autoinstall_obj:update_fts()
-  vim.treesitter.start()
+  pcall(vim.treesitter.start, bufnr)
+end
+
+---Populate `autoinstall_obj` state if it has not been initialized yet.
+local function ensure_init()
+  if vim.tbl_isempty(autoinstall_obj.available_fts) then
+    autoinstall_obj:init()
+  end
 end
 
 function M.setup_autoinstall()
-  if not config.auto_install_fts or type(config.auto_install_fts) == "table" and #config.auto_install_fts == 0 then
+  local conf = config.get_config()
+  local auto_install = conf.auto_install
+  if not auto_install or (type(auto_install) == "table" and #auto_install == 0) then
     return
   end
 
   autoinstall_obj:init()
 
-  local group = vim.api.nvim_create_augroup("nvim-treesitter-autoinstall", { clear = false })
+  local group = vim.api.nvim_create_augroup("nvim-treesitter-autoinstall", { clear = true })
 
   vim.api.nvim_create_autocmd('FileType', {
     group = group,
-    pattern = type(config.auto_install_fts) == "table" and config.auto_install_fts or "*",
-    callback = function()
-      local ft = vim.bo.filetype
-      if config.ignore_install_fts ~= nil and util.has_value(config.ignore_install_fts, ft) then
+    pattern = type(auto_install) == "table" and auto_install or "*",
+    callback = function(args)
+      local ft = vim.bo[args.buf].filetype
+      if ft == "" then
+        return
+      end
+      if conf.ignore_install and util.has_value(conf.ignore_install, ft) then
         return
       end
 
       -- Activate Tree-sitter when available
-      if util.has_value(M.available_fts, ft) then
+      if util.has_value(autoinstall_obj.available_fts, ft) then
         -- Install filetype
-        if not util.has_value(M.installed_fts, ft) then
-          a.arun(function ()
-            a.await(require("nvim-treesitter.install").install(ft))
-            treesitter_start()
+        if not util.has_value(autoinstall_obj.installed_fts, ft) then
+          a.arun(function()
+            a.await(M.install(ft))
+            treesitter_start(args.buf)
           end)
         else
-          treesitter_start()
+          treesitter_start(args.buf)
         end
       end
     end,
@@ -707,7 +721,7 @@ function autoinstall_obj:get_not_installed_languages(languages)
   local results = {}
 
   for _, lang in ipairs(languages) do
-    if not util.has_value(autoinstall_obj.installed_fts, lang) then
+    if not util.has_value(self.installed_fts, lang) then
       table.insert(results, lang)
     end
   end
@@ -716,9 +730,10 @@ function autoinstall_obj:get_not_installed_languages(languages)
 end
 
 ---@async
-M.setup_ensure_install = a.async(function ()
-  local langs = config.ensure_install
+M.setup_ensure_install = a.async(function()
+  local langs = config.get_config().ensure_install
   if langs and #langs > 0 then
+    ensure_init()
     local not_installed = autoinstall_obj:get_not_installed_languages(langs)
     a.await(M.install(not_installed))
   end

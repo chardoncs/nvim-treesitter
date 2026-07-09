@@ -32,6 +32,12 @@ function M.setup(user_data)
   install.setup_ensure_install()
 end
 
+---Returns the current configuration table.
+---@return TSConfig
+function M.get_config()
+  return config
+end
+
 -- Returns the install path for parsers, parser info, and queries.
 -- If the specified directory does not exist, it is created.
 ---@param dir_name string
